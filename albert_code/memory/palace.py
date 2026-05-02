@@ -183,12 +183,39 @@ class AlbertMemoryPalace:
         return out
 
     def clear(self) -> bool:
+        path = Path(self.palace_path)
+
+        if not path.exists():
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                return False
+            return True
+
         try:
             shutil.rmtree(self.palace_path)
-            Path(self.palace_path).mkdir(parents=True, exist_ok=True)
+            path.mkdir(parents=True, exist_ok=True)
             return True
         except OSError:
-            return False
+            # Fallback: certains environnements (Windows + handles Chroma ouverts)
+            # peuvent bloquer rmtree. On purge alors les collections en place.
+            try:
+                from mempalace.palace import get_closets_collection
+
+                def _purge_collection(col) -> None:
+                    got = col.get(include=[])
+                    if isinstance(got, dict):
+                        ids = got.get("ids", []) or []
+                    else:
+                        ids = getattr(got, "ids", []) or []
+                    if ids:
+                        col.delete(ids=ids)
+
+                _purge_collection(self._get_collection())
+                _purge_collection(get_closets_collection(self.palace_path, create=True))
+                return True
+            except Exception:
+                return False
 
     def get_status(self) -> dict[str, object]:
         status = {

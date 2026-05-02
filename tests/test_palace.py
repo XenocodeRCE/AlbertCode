@@ -15,6 +15,16 @@ class _FakeCollection:
     def count(self) -> int:
         return len(self.upserts)
 
+    def get(self, include=None, **kwargs):
+        where = kwargs.get("where")
+        if where is not None:
+            # Chemin anti-doublon: simuler "pas encore present".
+            return {"ids": []}
+        return {"ids": ["a", "b"]}
+
+    def delete(self, ids=None):
+        return None
+
 
 def test_palace_disables_when_embedding_init_fails(monkeypatch):
     def _raise(*args, **kwargs):
@@ -107,3 +117,30 @@ def test_palace_recall_surfaces_search_error_warning(monkeypatch, tmp_path):
     assert res == []
     status = palace.get_status()
     assert "recherche indisponible" in str(status.get("warning", "")).lower()
+
+
+def test_palace_clear_returns_true_when_path_missing(tmp_path):
+    palace = AlbertMemoryPalace(
+        enabled=False,
+        palace_path=str(tmp_path / "missing-palace"),
+    )
+
+    assert palace.clear() is True
+
+
+def test_palace_clear_falls_back_to_collection_purge(monkeypatch, tmp_path):
+    palace_dir = tmp_path / "palace"
+    palace_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr("albert_code.memory.palace.shutil.rmtree", lambda p: (_ for _ in ()).throw(OSError("locked")))
+
+    fake_col = _FakeCollection()
+    monkeypatch.setattr("albert_code.memory.palace.AlbertMemoryPalace._get_collection", lambda self: fake_col)
+    monkeypatch.setattr("mempalace.palace.get_closets_collection", lambda path, create=True: fake_col)
+
+    palace = AlbertMemoryPalace(
+        enabled=False,
+        palace_path=str(palace_dir),
+    )
+
+    assert palace.clear() is True
