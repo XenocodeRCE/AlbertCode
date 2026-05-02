@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .api import AlbertClient
-from .config import C, DEFAULT_MAX_STEPS
+from .config import ALBERT_BASE, C, DEFAULT_MAX_STEPS
 from .context import compact_history as _compact, needs_compaction
 from .display import (
     ask_confirmation,
@@ -24,6 +24,7 @@ from .display import (
     print_tool_result,
 )
 from .git_autocommit import auto_commit
+from .memory.palace import AlbertMemoryPalace
 from .project_config import ProjectConfig, format_for_prompt
 from .prompts import SYSTEM_PROMPT
 from .skills import Skill, SkillRegistry
@@ -51,6 +52,14 @@ class AgentSession:
     todo_file_name: str = ".albert-code.todo.md"
     skill_registry: SkillRegistry = field(default_factory=SkillRegistry)
     project_cfg:  ProjectConfig = field(default_factory=ProjectConfig)
+    memory_enabled: bool = True
+    memory_auto_save: bool = True
+    memory_auto_recall: bool = True
+    memory_recall_top_k: int = 3
+    memory_recall_max_tokens: int = 800
+    memory_palace_path: str = "~/.albert-code/palace"
+    memory_store: AlbertMemoryPalace | None = None
+    _memory_warning_shown: bool = False
 
     # ──────────────────────────────────────────
     #  Initialisation
@@ -66,6 +75,7 @@ class AgentSession:
         self.active_skills = []
         self.todo_items = []
         self._load_todo()
+        self._ensure_memory_store()
         self.pinned_skills = [
             n for n in self.pinned_skills
             if self.skill_registry.get_by_name(n) is not None
@@ -79,6 +89,97 @@ class AgentSession:
             skills_catalog=skills_catalog,
         )
         self.messages = [{"role": "system", "content": system_msg}]
+
+    def _ensure_memory_store(self) -> None:
+        if self.memory_store is not None:
+            return
+        self.memory_store = AlbertMemoryPalace(
+            enabled=self.memory_enabled,
+            base_url=getattr(self.client, "base_url", ALBERT_BASE),
+            palace_path=self.memory_palace_path,
+            api_key=getattr(self.client, "api_key", None),
+        )
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        return len(text) // 4
+
+    def _build_memory_context(self, query: str) -> str:
+        self._ensure_memory_store()
+        if not self.memory_auto_recall or self.memory_store is None:
+            return ""
+
+        memories = self.memory_store.recall(query, top_k=self.memory_recall_top_k)
+        if not memories:
+            status = self.memory_store.get_status()
+            warning = str(status.get("warning", "")).strip()
+            if warning and not self._memory_warning_shown:
+                print(f"  {C.YELLOW}⚠️  {warning}{C.RESET}")
+                self._memory_warning_shown = True
+            return ""
+
+        lines = ["[Mémoire contextuelle]"]
+        for i, item in enumerate(memories, start=1):
+            chunk = (
+                f"{i}. (sim={item.similarity:.3f}, src={item.source_file})\n"
+                f"{item.text.strip()}"
+            )
+            lines.append(chunk)
+            current = "\n\n".join(lines)
+            if self._estimate_tokens(current) >= self.memory_recall_max_tokens:
+                lines.pop()
+                break
+
+        if len(lines) == 1:
+            return ""
+        lines.append("[/Mémoire contextuelle]")
+        return "\n\n".join(lines)
+
+    def recall_memories_for_prompt(self, query: str, top_k: int | None = None) -> list[dict[str, object]]:
+        self._ensure_memory_store()
+        if self.memory_store is None:
+            return []
+        results = self.memory_store.recall(query, top_k=top_k or self.memory_recall_top_k)
+        return [
+            {
+                "text": it.text,
+                "similarity": it.similarity,
+                "source_file": it.source_file,
+            }
+            for it in results
+        ]
+
+    def save_memory_snapshot(self, force: bool = False) -> bool:
+        self._ensure_memory_store()
+        if self.memory_store is None:
+            return False
+        if not force and not self.memory_auto_save:
+            return False
+        ok = self.memory_store.save_conversation(self.messages)
+        if not ok:
+            status = self.memory_store.get_status()
+            warning = str(status.get("warning", "")).strip()
+            if warning and not self._memory_warning_shown:
+                print(f"  {C.YELLOW}⚠️  {warning}{C.RESET}")
+                self._memory_warning_shown = True
+        return ok
+
+    def memory_status(self) -> dict[str, object]:
+        self._ensure_memory_store()
+        if self.memory_store is None:
+            return {"enabled": False, "available": False, "warning": "Memoire indisponible"}
+        status = self.memory_store.get_status()
+        status["auto_save"] = self.memory_auto_save
+        status["auto_recall"] = self.memory_auto_recall
+        status["recall_top_k"] = self.memory_recall_top_k
+        status["recall_max_tokens"] = self.memory_recall_max_tokens
+        return status
+
+    def clear_memory_store(self) -> bool:
+        self._ensure_memory_store()
+        if self.memory_store is None:
+            return False
+        return self.memory_store.clear()
 
     def add_user_message(self, text: str) -> None:
         self.messages.append({"role": "user", "content": text})
@@ -264,6 +365,7 @@ class AgentSession:
             return self.messages
 
         prompt = str(last.get("content", ""))
+        memory_blob = self._build_memory_context(prompt)
         selected: list[Skill]
         if self.pinned_skills:
             selected = []
@@ -290,6 +392,8 @@ class AgentSession:
         extra_msgs: list[dict] = []
         if skill_blob:
             extra_msgs.append({"role": "system", "content": skill_blob})
+        if memory_blob:
+            extra_msgs.append({"role": "system", "content": memory_blob})
         if todo_blob:
             extra_msgs.append({
                 "role": "system",
@@ -474,3 +578,6 @@ class AgentSession:
     def compact_history(self) -> None:
         """Compresse les messages intermédiaires pour économiser des tokens."""
         self.messages = _compact(self.messages, client=self.client, verbosity=self.verbosity)
+
+    def set_memory_recall_enabled(self, enabled: bool) -> None:
+        self.memory_auto_recall = enabled

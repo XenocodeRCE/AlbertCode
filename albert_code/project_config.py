@@ -48,6 +48,14 @@ class ProjectConfig:
     # Patterns glob de fichiers à ignorer dans list_files et grep_search
     ignore_patterns: list[str] = field(default_factory=list)
 
+    # [memory] — memoire persistante MemPalace
+    memory_enabled: bool = True
+    memory_auto_save: bool = True
+    memory_auto_recall: bool = True
+    memory_recall_top_k: int = 3
+    memory_recall_max_tokens: int = 800
+    memory_palace_path: str = "~/.albert-code/palace"
+
 
 def _find_config(start: Path | None = None) -> Path | None:
     """Remonte l'arborescence depuis `start` pour trouver .albert-code.toml."""
@@ -111,6 +119,28 @@ def load_project_config(start: Path | None = None) -> ProjectConfig:
     patterns = ignore.get("patterns", [])
     if isinstance(patterns, list):
         cfg.ignore_patterns = [str(p) for p in patterns]
+
+    # [memory]
+    memory = data.get("memory", {})
+    if isinstance(memory, dict):
+        if "enabled" in memory:
+            cfg.memory_enabled = bool(memory.get("enabled"))
+        if "auto_save" in memory:
+            cfg.memory_auto_save = bool(memory.get("auto_save"))
+        if "auto_recall" in memory:
+            cfg.memory_auto_recall = bool(memory.get("auto_recall"))
+        if "recall_top_k" in memory:
+            try:
+                cfg.memory_recall_top_k = max(1, int(memory.get("recall_top_k")))
+            except (TypeError, ValueError):
+                pass
+        if "recall_max_tokens" in memory:
+            try:
+                cfg.memory_recall_max_tokens = max(64, int(memory.get("recall_max_tokens")))
+            except (TypeError, ValueError):
+                pass
+        if "palace_path" in memory and str(memory.get("palace_path", "")).strip():
+            cfg.memory_palace_path = str(memory.get("palace_path"))
 
     return cfg
 

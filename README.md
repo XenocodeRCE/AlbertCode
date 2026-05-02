@@ -32,6 +32,12 @@ Option dev:
 pip install -e ".[dev]"
 ```
 
+Option memoire persistante (MemPalace + embeddings Albert API):
+
+```bash
+pip install -e ".[memory]"
+```
+
 ## Lancement
 
 Variable d'environnement:
@@ -86,6 +92,12 @@ albert-code "analyse ce projet et propose un plan"
 - /skills install <url|owner/repo> [nom]: installer un SKILL.md
 - /auto: activer/desactiver l'auto-approve
 - /fallback: activer/desactiver l'auto-fallback 429
+- /memory: afficher l'etat du sous-systeme memoire
+- /memory status: etat du palace memoire
+- /memory search <query>: rechercher dans la memoire
+- /memory save: sauvegarder la conversation courante
+- /memory on|off: activer/desactiver le recall memoire automatique
+- /memory clear: vider le palace memoire (confirmation)
 - /verbose: verbosite maximale
 - /quiet: verbosite minimale
 - /normal (ou /v1): verbosite normale
@@ -107,6 +119,18 @@ Mode multi-ligne: taper """ seul pour entrer/sortir du mode multi-ligne.
 - API key: ALBERT_API_KEY
 - Fichier projet optionnel: .albert-code.toml
 - Exemple: .albert-code.toml.example
+
+Section memoire dans `.albert-code.toml`:
+
+```toml
+[memory]
+enabled = true
+auto_save = true
+auto_recall = true
+recall_top_k = 3
+recall_max_tokens = 800
+palace_path = "~/.albert-code/palace"
+```
 
 Les options CLI surchargent la configuration projet.
 

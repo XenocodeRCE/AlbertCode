@@ -56,6 +56,7 @@ class AlbertClient:
         fallback_duration_seconds: int = 60,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
         self.model    = model
         self.timeout  = timeout
         self.max_requests_per_minute = max(1, int(max_requests_per_minute))

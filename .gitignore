@@ -19,6 +19,8 @@ secrets.*
 
 # Albert local/runtime files
 .albert-code.todo.md
+.albert-code/palace/
+**/.albert-code/palace/
 
 # OS / editor
 .DS_Store

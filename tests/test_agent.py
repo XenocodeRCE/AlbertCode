@@ -162,3 +162,20 @@ def test_clear_todo_removes_persisted_file(tmp_path, monkeypatch):
     session.clear_todo()
     assert session.todo_items == []
     assert not todo_file.exists()
+
+
+def test_memory_store_receives_client_api_key(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakePalace:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("albert_code.agent.AlbertMemoryPalace", _FakePalace)
+
+    session = _make_session()
+    session.client.api_key = "cli-key"
+
+    session._ensure_memory_store()
+
+    assert captured.get("api_key") == "cli-key"

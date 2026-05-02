@@ -40,3 +40,14 @@
 #     "alembic/versions/*.py",
 #     "coverage.xml",
 # ]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [memory] — Memoire persistante MemPalace
+# ──────────────────────────────────────────────────────────────────────────────
+# [memory]
+# enabled = true
+# auto_save = true
+# auto_recall = true
+# recall_top_k = 3
+# recall_max_tokens = 800
+# palace_path = "~/.albert-code/palace"

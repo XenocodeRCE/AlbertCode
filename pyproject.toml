@@ -33,6 +33,10 @@ dev = [
     "ruff>=0.4",
     "pyreadline3; sys_platform == 'win32'",
 ]
+memory = [
+    "mempalace>=3.3.4",
+    "openai>=1.30",
+]
 
 [project.scripts]
 albert-code = "albert_code:main"

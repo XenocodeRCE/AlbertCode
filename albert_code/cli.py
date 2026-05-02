@@ -66,6 +66,11 @@ HELP_TEXT = f"""
     {C.GRAY_LIGHT}/skills install{C.RESET} <url|owner/repo> [nom] — Installer un SKILL.md
   {C.GRAY_LIGHT}/auto{C.RESET}      — Activer/désactiver l'auto-approbation
     {C.GRAY_LIGHT}/fallback{C.RESET}  — Activer/désactiver l'auto-fallback 429
+        {C.GRAY_LIGHT}/memory status{C.RESET}          — Etat du palace memoire
+        {C.GRAY_LIGHT}/memory search{C.RESET} <query>  — Recherche semantique memoire
+        {C.GRAY_LIGHT}/memory save{C.RESET}            — Sauvegarder la conversation courante
+        {C.GRAY_LIGHT}/memory on|off{C.RESET}          — Activer/desactiver le recall auto
+        {C.GRAY_LIGHT}/memory clear{C.RESET}           — Vider le palace memoire
   {C.GRAY_LIGHT}/verbose{C.RESET}   — Afficher tous les outputs des outils
   {C.GRAY_LIGHT}/quiet{C.RESET}     — Masquer les détails des outils
   {C.GRAY_LIGHT}/normal{C.RESET}    — Verbosité normale (défaut)
@@ -276,6 +281,7 @@ def repl(session: AgentSession) -> None:
 
             # ── Commandes spéciales ──────────────
             if cmd in ("/quit", "/exit", "/q"):
+                session.save_memory_snapshot()
                 print(f"\n{_M}  {C.DIM}Au revoir !{C.RESET}  {C.ROUGE}🇫🇷{C.RESET}\n")
                 break
             elif cmd == "/help":
@@ -343,6 +349,7 @@ def repl(session: AgentSession) -> None:
                 print(f"  {C.GREEN}🔄 Conversation réinitialisée.{C.RESET}\n")
                 continue
             elif cmd == "/compact":
+                session.save_memory_snapshot()
                 session.compact_history()
                 continue
             elif cmd == "/stats":
@@ -372,6 +379,11 @@ def repl(session: AgentSession) -> None:
                 active_skills = ", ".join(session.active_skills[:3]) if session.active_skills else "-"
                 pinned_skills = ", ".join(session.pinned_skills[:3]) if session.pinned_skills else "auto"
                 todo_done, todo_total = session.todo_counts()
+                mem = session.memory_status()
+                mem_on = f"{C.GREEN}ON{C.RESET}" if mem.get("enabled") else f"{C.DIM}off{C.RESET}"
+                mem_recall = f"{C.GREEN}ON{C.RESET}" if mem.get("auto_recall") else f"{C.DIM}off{C.RESET}"
+                mem_state = f"{C.GREEN}ok{C.RESET}" if mem.get("available") else f"{C.YELLOW}degrade{C.RESET}"
+                mem_entries = int(mem.get("entries", 0))
                 plines(draw_box([
                     f"{C.BOLD}{C.WHITE}Configuration active{C.RESET}",
                     "",
@@ -385,11 +397,97 @@ def repl(session: AgentSession) -> None:
                     f"  {C.GRAY}Skills SKILL.md:{C.RESET} {skills_state} {C.DIM}({skills_n} charges){C.RESET}",
                     f"  {C.GRAY}Mode skills  :{C.RESET}  {C.WHITE}{pinned_skills}{C.RESET}",
                     f"  {C.GRAY}Skills actifs:{C.RESET}  {C.WHITE}{active_skills}{C.RESET}",
+                    f"  {C.GRAY}Memoire      :{C.RESET}  {mem_on} / recall {mem_recall} / {mem_state}",
+                    f"  {C.GRAY}Palace       :{C.RESET}  {C.WHITE}{mem_entries}{C.RESET} entree(s)",
                     f"  {C.GRAY}TODO plan    :{C.RESET}  {C.WHITE}{todo_done}/{todo_total}{C.RESET}",
                     f"  {C.GRAY}Protection snapshots:{C.RESET} {safe_str}",
                     f"  {C.GRAY}Checkpoints  :{C.RESET}  {C.WHITE}{cp_count}{C.RESET}",
                     f"  {C.GRAY}Messages     :{C.RESET}  {C.WHITE}{len(session.messages)}{C.RESET}",
                 ], color=C.GRAY))
+                mem_warning = str(mem.get("warning", "")).strip()
+                if mem_warning:
+                    print(f"  {C.DIM}{mem_warning}{C.RESET}")
+                print()
+                continue
+            elif cmd == "/memory":
+                action = cmd_parts[1].lower() if len(cmd_parts) > 1 else "status"
+
+                if action == "on":
+                    session.set_memory_recall_enabled(True)
+                    print(f"  Recall memoire : {C.GREEN}ON{C.RESET}\n")
+                    continue
+                if action == "off":
+                    session.set_memory_recall_enabled(False)
+                    print(f"  Recall memoire : {C.YELLOW}OFF{C.RESET}\n")
+                    continue
+                if action == "save":
+                    ok = session.save_memory_snapshot(force=True)
+                    if ok:
+                        print(f"  {C.GREEN}✔{C.RESET} Conversation sauvegardee dans le palace\n")
+                    else:
+                        print(f"  {C.YELLOW}⚠{C.RESET} Sauvegarde memoire indisponible\n")
+                    continue
+                if action == "clear":
+                    try:
+                        ans = input(f"  {C.YELLOW}Confirmer suppression du palace ? [y/N]{C.RESET} ").strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        ans = "n"
+                    if ans not in ("y", "yes", "o", "oui"):
+                        print(f"  {C.DIM}Annule.{C.RESET}\n")
+                        continue
+                    ok = session.clear_memory_store()
+                    if ok:
+                        print(f"  {C.GREEN}✔{C.RESET} Palace memoire vide\n")
+                    else:
+                        print(f"  {C.RED}✗{C.RESET} Impossible de vider le palace\n")
+                    continue
+                if action == "search":
+                    query = _extract_command_arg(first_line, "/memory search")
+                    if not query:
+                        print(f"  {C.YELLOW}Usage: /memory search <query>{C.RESET}\n")
+                        continue
+                    results = session.recall_memories_for_prompt(query)
+                    if not results:
+                        mem = session.memory_status()
+                        warning = str(mem.get("warning", "")).strip()
+                        if warning:
+                            print(f"  {C.YELLOW}⚠ {warning}{C.RESET}\n")
+                        else:
+                            print(f"  {C.DIM}Aucun resultat memoire.{C.RESET}\n")
+                        continue
+                    lines = [f"{C.BOLD}{C.WHITE}Resultats memoire{C.RESET}", ""]
+                    for i, row in enumerate(results, start=1):
+                        lines.append(
+                            f"  {C.GRAY}{i}.{C.RESET} {C.WHITE}sim={float(row['similarity']):.3f}{C.RESET} "
+                            f"{C.DIM}src={row['source_file']}{C.RESET}"
+                        )
+                        snippet = str(row["text"]).replace("\n", " ").strip()
+                        lines.append(f"     {snippet[:160]}")
+                    plines(draw_box(lines, color=C.GRAY))
+                    print()
+                    continue
+
+                mem = session.memory_status()
+                enabled = f"{C.GREEN}ON{C.RESET}" if mem.get("enabled") else f"{C.DIM}off{C.RESET}"
+                auto_save = f"{C.GREEN}ON{C.RESET}" if mem.get("auto_save") else f"{C.DIM}off{C.RESET}"
+                auto_recall = f"{C.GREEN}ON{C.RESET}" if mem.get("auto_recall") else f"{C.DIM}off{C.RESET}"
+                available = f"{C.GREEN}ok{C.RESET}" if mem.get("available") else f"{C.YELLOW}degrade{C.RESET}"
+                lines = [
+                    f"{C.BOLD}{C.WHITE}Memoire persistante{C.RESET}",
+                    "",
+                    f"  {C.GRAY}Enabled:{C.RESET} {enabled}",
+                    f"  {C.GRAY}Etat:{C.RESET} {available}",
+                    f"  {C.GRAY}Auto-save:{C.RESET} {auto_save}",
+                    f"  {C.GRAY}Auto-recall:{C.RESET} {auto_recall}",
+                    f"  {C.GRAY}Top-k:{C.RESET} {mem.get('recall_top_k')}",
+                    f"  {C.GRAY}Max tokens:{C.RESET} {mem.get('recall_max_tokens')}",
+                    f"  {C.GRAY}Entrees:{C.RESET} {mem.get('entries', 0)}",
+                    f"  {C.GRAY}Palace:{C.RESET} {mem.get('palace_path', '-')}",
+                ]
+                warning = str(mem.get("warning", "")).strip()
+                if warning:
+                    lines.extend(["", f"  {C.YELLOW}⚠ {warning}{C.RESET}"])
+                plines(draw_box(lines, color=C.GRAY))
                 print()
                 continue
             elif cmd == "/skills":
@@ -772,6 +870,7 @@ def repl(session: AgentSession) -> None:
             print(f"\n{_M}  {C.YELLOW}Interrompu.{C.RESET} Tapez /quit pour quitter.\n")
             continue
         except EOFError:
+            session.save_memory_snapshot()
             print(f"\n{_M}  {C.DIM}Au revoir !{C.RESET}  {C.ROUGE}🇫🇷{C.RESET}\n")
             break
 
@@ -856,6 +955,12 @@ def main() -> None:
         git_commit=not args.no_git_commit,
         persist_todo=True,
         project_cfg=project_cfg,
+        memory_enabled=project_cfg.memory_enabled,
+        memory_auto_save=project_cfg.memory_auto_save,
+        memory_auto_recall=project_cfg.memory_auto_recall,
+        memory_recall_top_k=project_cfg.memory_recall_top_k,
+        memory_recall_max_tokens=project_cfg.memory_recall_max_tokens,
+        memory_palace_path=project_cfg.memory_palace_path,
     )
     session.initialize()
 
