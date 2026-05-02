@@ -1,0 +1,42 @@
+# .albert-code.toml — Configuration projet pour Albert Code
+#
+# Placez ce fichier à la racine de votre dépôt.
+# Toutes les sections et clés sont optionnelles.
+# Albert Code remonte l'arborescence pour trouver ce fichier (comme git).
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [project] — Instructions contextuelles injectées dans le system prompt
+# ──────────────────────────────────────────────────────────────────────────────
+# [project]
+# instructions = """
+#     Ce projet est une API REST construite avec FastAPI et SQLAlchemy (async).
+#     Les tests sont écrits avec pytest + httpx AsyncClient. Lance-les : make test
+#     On suit PEP 8 strictement — ruff est configuré, vérifie avec : make lint
+#     Les migrations Alembic sont dans alembic/versions/ — ne les modifie JAMAIS
+#     sans en avoir discuté avec l'utilisateur.
+#     La branche principale est 'main'. Feature branches : feat/<nom>.
+# """
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [model] — Surcharge du modèle et de l'API (priorité moindre que les flags CLI)
+# ──────────────────────────────────────────────────────────────────────────────
+# [model]
+# name     = "openweight-large"
+# base_url = "https://albert.api.etalab.gouv.fr/v1"
+# timeout  = 90
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [ignore] — Fichiers exclus de list_files et grep_search
+# Supporte les patterns glob (fnmatch) sur le nom ou le chemin relatif.
+# ──────────────────────────────────────────────────────────────────────────────
+# [ignore]
+# patterns = [
+#     "*.log",
+#     "*.env",
+#     ".env",
+#     "secrets.toml",
+#     "*.key",
+#     "*.pem",
+#     "alembic/versions/*.py",
+#     "coverage.xml",
+# ]

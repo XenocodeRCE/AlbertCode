@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "albert-code"
+version = "0.1.0"
+description = "Agent de code souverain propulsé par Albert API (DINUM/Etalab)"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Albert Code Contributors" }]
+keywords = ["ai", "agent", "code", "albert", "souverain", "dinum"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+    "pyreadline3; sys_platform == 'win32'",
+]
+
+[project.scripts]
+albert-code = "albert_code:main"
+
+[project.urls]
+Homepage = "https://github.com/etalab/albert-code"
+Issues   = "https://github.com/etalab/albert-code/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["albert_code*"]
+
+# ──────────────────────────────────────────────
+#  Ruff (lint + format)
+# ──────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]  # lignes longues tolérées dans les f-strings d'affichage
+
+# ──────────────────────────────────────────────
+#  Pytest
+# ──────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

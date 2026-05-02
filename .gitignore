@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# Local config and secrets
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.*
+
+# Albert local/runtime files
+.albert-code.todo.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
